@@ -10,7 +10,7 @@
 #import "YKNodeModel.h"
 
 
-@interface YKNodeCell : UITableViewCell<UIContentContainer>
+@interface YKNodeCell : UITableViewCell
 
 @property (nonatomic, strong) YKNodeModel *node;
 
@@ -54,25 +54,24 @@ static CGFloat const leftMargin = 30.0; //left indentation
 - (void)setNode:(YKNodeModel *)node{
     _node = node;
 
-    CGFloat indentationX = 0;
-    CGFloat rgbValue = 0;
-    for (int i = 1; i<node.level;i++) {
-        indentationX += leftMargin;
-        rgbValue += 50;
-    }
     //set indentation
+    CGFloat indentationX = (node.level-1)*leftMargin;
     [self moveNode:indentationX];
     
+    //text color
+    CGFloat rgbValue = (node.level-1)*50;
     _nodeLabel.textColor  = RGB(rgbValue, rgbValue, rgbValue, 1.0);
-    _nodeLabel.text = node.name;
     
+    
+    _nodeLabel.text = node.name;
     if (node.isExpand || node.isLeaf) {
         _leftImage.image = [UIImage imageNamed:@"YK_minus"];
     }else{
         _leftImage.image = [UIImage imageNamed:@"YK_plus"];
     }
     
-    //_leftImage.hidden = node.isLeaf;//hidden left log for leaf node or not
+    //hidden left log for leaf node or not
+   // _leftImage.hidden = node.isLeaf;
 }
 
 - (void)moveNode:(CGFloat)indentationX{
@@ -80,13 +79,13 @@ static CGFloat const leftMargin = 30.0; //left indentation
     CGFloat cellHeight = _rect.size.height;
     CGFloat cellWidth  = _rect.size.width;
     
-    CGRect frame = CGRectMake(leftMargin, 0, cellWidth-leftMargin, cellHeight);
-    frame.origin.x = leftMargin+indentationX;
-    _nodeLabel.frame = frame;
-    
     CGRect frame1 = CGRectMake(0, (cellHeight-leftMargin)/2, leftMargin, leftMargin);
     frame1.origin.x = indentationX;
     _leftImage.frame = frame1;
+    
+    CGRect frame = CGRectMake(leftMargin, 0, cellWidth-leftMargin, cellHeight);
+    frame.origin.x = leftMargin+indentationX;
+    _nodeLabel.frame = frame;
     
     CGRect frame2 = CGRectMake(0, cellHeight-1, cellWidth, 1);
     frame2.origin.x = indentationX;
@@ -100,9 +99,10 @@ static CGFloat const leftMargin = 30.0; //left indentation
 #pragma mark YKMultiLevelTableView
 @interface YKMultiLevelTableView ()<UITableViewDelegate, UITableViewDataSource>
 
-@property (nonatomic, strong) NSString *rootID;
+@property (nonatomic, copy) NSString *rootID;
 
-@property (nonatomic, strong) NSMutableArray *nodes;
+//all nodes
+@property (nonatomic, copy) NSMutableArray *nodes;
 
 //show the last status all child nodes keep when yes, or just show next level child nodes
 @property (nonatomic, assign ,getter=isPreservation) BOOL preservation;
@@ -118,13 +118,15 @@ static CGFloat const leftMargin = 30.0; //left indentation
 static CGFloat const cellHeight = 45.0;
 @implementation YKMultiLevelTableView
 
+#pragma mark
+#pragma mark life cycle
 - (id)initWithFrame:(CGRect)frame nodes:(NSArray*)nodes rootNodeID:(NSString*)rootID needPreservation:(BOOL)need selectBlock:(YKSelectBlock)block{
     self = [self initWithFrame:frame];
     if (self) {
-        self.rootID = (!rootID) ? @"" : rootID;
+        self.rootID = rootID ?: @"";
         self.preservation = need;
-        self.nodes = [nodes mutableCopy];
-        self.block = block;
+        self.nodes = [nodes copy];
+        self.block = [block copy];
     }
     return self;
 }
@@ -143,22 +145,45 @@ static CGFloat const cellHeight = 45.0;
     return self;
 }
 
+#pragma mark
+#pragma mark set node's leaf and root propertys ,and level
 - (void)setNodes:(NSMutableArray *)nodes{
     _nodes = nodes;
 
-    BOOL hasDepth = YES;
-    for (int i = 0 ; i<nodes.count;i++) {
-        YKNodeModel *node = nodes[i];
-        
-        //judge have set depth or not
-        if (node.level<=0) {
-            hasDepth = NO;
-        }
+    [self judgeLeafAndRootNodes];
+    
+    [self updateNodesLevel];
+    
+    [self addFirstLoadNodes];
+    
+    [self reloadData];
+}
 
-        //judge leaf node and root node
+- (void)addFirstLoadNodes{
+    // add parent nodes on the upper level
+    for (int i = 0 ; i<_nodes.count;i++) {
+        
+    	YKNodeModel *node = _nodes[i];
+        if (node.isRoot) {
+            [_tempNodes addObject:node];
+            
+            if (node.isExpand) {
+                [self expandNodesForParentID:node.childrenID insertIndex:[_tempNodes indexOfObject:node]];
+            }
+        }
+    }
+    [_reloadArray removeAllObjects];
+}
+
+//judge leaf node and root node
+- (void)judgeLeafAndRootNodes{
+    for (int i = 0 ; i<_nodes.count;i++) {
+        YKNodeModel *node = _nodes[i];
+        
+        
         BOOL isLeaf = YES;
         BOOL isRoot = YES;
-        for (YKNodeModel *tempNode in nodes) {
+        for (YKNodeModel *tempNode in _nodes) {
             if ([tempNode.parentID isEqualToString:node.childrenID]) {
                 isLeaf = NO;
             }
@@ -171,20 +196,12 @@ static CGFloat const cellHeight = 45.0;
         }
         node.leaf = isLeaf;
         node.root = isRoot;
-        
-        
-        // add parent nodes on the upper level
-        if ([node.parentID isEqualToString:_rootID]) {
-            [_tempNodes addObject:node];
-        }
     }
-    
-    //set depath for all nodes
-    if (!hasDepth) {
-        [self setDepth:1 parentIDs:@[_rootID] childrenNodes:_nodes];
-    }
-    
-    [self reloadData];
+}
+
+//set depath for all nodes
+- (void)updateNodesLevel{
+    [self setDepth:1 parentIDs:@[_rootID] childrenNodes:_nodes];
 }
 
 - (void)setDepth:(NSUInteger)level parentIDs:(NSArray*)parentIDs childrenNodes:(NSMutableArray*)childrenNodes{
@@ -206,7 +223,7 @@ static CGFloat const cellHeight = 45.0;
     }
 }
 
-
+#pragma mark
 #pragma mark UITableView delegate
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section{
     return _tempNodes.count;
@@ -237,9 +254,9 @@ static CGFloat const cellHeight = 45.0;
         currentNode.expand = !currentNode.expand;
     }
     
-    [_reloadArray removeAllObjects];
     [tableView reloadRowsAtIndexPaths:@[indexPath] withRowAnimation:UITableViewRowAnimationNone];
     
+    [_reloadArray removeAllObjects];
     if (currentNode.isExpand) {
         //expand
         [self expandNodesForParentID:currentNode.childrenID insertIndex:indexPath.row];
@@ -251,7 +268,8 @@ static CGFloat const cellHeight = 45.0;
     }
 }
 
-//fold
+#pragma mark
+#pragma mark fold and expand
 - (void)foldNodesForLevel:(NSUInteger)level currentIndex:(NSUInteger)currentIndex{
     
     if (currentIndex+1<_tempNodes.count) {
@@ -268,7 +286,6 @@ static CGFloat const cellHeight = 45.0;
     }
 }
 
-//expand
 - (NSUInteger)expandNodesForParentID:(NSString*)parentID insertIndex:(NSUInteger)insertIndex{
    
     for (int i = 0 ; i<_nodes.count;i++) {
@@ -289,5 +306,7 @@ static CGFloat const cellHeight = 45.0;
     
     return insertIndex;
 }
+
+
 
 @end

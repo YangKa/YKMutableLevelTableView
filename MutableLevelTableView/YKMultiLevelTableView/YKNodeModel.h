@@ -16,9 +16,10 @@
 
 @property (nonatomic, strong) NSString *name;
 
-@property (nonatomic, assign) NSUInteger level;// depth in the tree sturct
-
 @property (nonatomic, assign, getter=isExpand) BOOL expand;
+
+
+@property (nonatomic, assign) NSUInteger level;// depth in the tree sturct
 
 @property (nonatomic, assign, getter=isLeaf) BOOL leaf;
 
@@ -34,5 +35,7 @@
  *  @param bol        this node's child node is expand or not
  */
 + (instancetype)nodeWithParentID:(NSString*)parentID name:(NSString*)name childrenID:(NSString*)childrenID level:(NSUInteger)level isExpand:(BOOL)bol;
+
++ (instancetype)nodeWithParentID:(NSString*)parentID name:(NSString*)name childrenID:(NSString*)childrenID isExpand:(BOOL)bol;
 
 @end
